@@ -26,6 +26,11 @@ After you flash the software, you can simply enter into the Home Assistant and a
 
 Encryption is disabled in this example. You can enable it by editing `app.c`.
 
+## Custom HA integration
+BTHome V2 is supported natively in Home Assistant and doesn't require any custom integration, and it is stable.
+
+If you want to experiment with more functions with the Thunderboard Sense 2, check out [this HA custom integration](https://github.com/cheadrian/thunderboard-ha).
+
 ## Related
 
 - [Bluetooth - BTHome v2 - Humidity and Temperature Monitor (SHTC3)](https://github.com/SiliconLabs/bluetooth_applications/tree/master/bluetooth_bthome_v2_humidity_and_temperature_monitor#bluetooth---bthome-v2---humidity-and-temperature-monitor-shtc3)
