@@ -36,14 +36,50 @@
 #include "sl_power_supply.h"
 #include "sl_simple_button_instances.h"
 #include "app_log.h"
+#include "sl_sleeptimer.h"
+#include <stdbool.h>
+#include <stdio.h>
+#include "sl_mic.h"
+
+/**************************************************************************//**
+ * Include the sensors definition
+ *****************************************************************************/
+#ifdef SL_COMPONENT_CATALOG_PRESENT
+#include "sl_component_catalog.h"
+#endif // SL_COMPONENT_CATALOG_PRESENT
 #ifdef SL_CATALOG_SENSOR_RHT_PRESENT
 #include "sl_sensor_rht.h"
 #endif // SL_CATALOG_SENSOR_RHT_PRESENT
-#include "sl_sleeptimer.h"
+#ifdef SL_CATALOG_SENSOR_HALL_PRESENT
+#include "sl_sensor_hall.h"
+#endif // SL_CATALOG_SENSOR_HALL_PRESENT
+#ifdef SL_CATALOG_SENSOR_LIGHT_PRESENT
+#include "sl_sensor_light.h"
+#endif // SL_CATALOG_SENSOR_LIGHT_PRESENT
+#ifdef SL_CATALOG_SENSOR_IMU_PRESENT
+#include "sl_sensor_imu.h"
+#endif // SL_CATALOG_SENSOR_IMU_PRESENT
+#ifdef SL_CATALOG_SENSOR_PRESSURE_PRESENT
+#include "sl_sensor_pressure.h"
+#endif // SL_CATALOG_SENSOR_PRESSURE_PRESENT
+#ifdef SL_CATALOG_SENSOR_GAS_PRESENT
+#include "sl_sensor_gas.h"
+#endif // SL_CATALOG_SENSOR_GAS_PRESENT
+#ifdef SL_CATALOG_SENSOR_SOUND_PRESENT
+#include "sl_sensor_sound.h"
+#endif // SL_CATALOG_SENSOR_SOUND_PRESENT
 
-static uint8_t name[] = "BGM220P";
+/**************************************************************************//**
+ * Define the name and encryption key for BTHome V2.
+ * Note: encryption disabled by default in this example
+ * modify the bthome_v2_init() to enable.
+ *****************************************************************************/
+static uint8_t name[] = "TBS2";
 static uint8_t key[] = "231d39c1d7cc1ab1aee224cd096db932";
 
+/**************************************************************************//**
+ * Increase the advertising interval to longer the battery life
+ *****************************************************************************/
 #define ADVERTISING_INTERVAL 60000
 #define BUTTON_NONE_TIMEOUT 250
 #define DSLEEP_TIMEOUT 500
@@ -52,6 +88,7 @@ static uint8_t key[] = "231d39c1d7cc1ab1aee224cd096db932";
 #define EVENT_BUTTON_B0 0xA0
 #define EVENT_BUTTON_B1 0xA1
 #define BUTTON_NONE_EXT_SIG 0xA5
+#define BLE_ADVERTISE_TIME_INTERVAL_MS 100
 
 static sl_sleeptimer_timer_handle_t adv_interval_timer;
 static sl_sleeptimer_timer_handle_t deep_sleep_timer;
@@ -62,6 +99,8 @@ static void sensor_deinit(void);
 static void bthome_add_sensor_data_and_battery(void);
 static void start_button_none_timer(void);
 static void start_deep_sleep_timer(void);
+static void send_text_to_bthome_v2(const char text[]);
+static void send_data_packet_to_bthome_v2(void);
 
 static void adv_interval_timer_callback(sl_sleeptimer_timer_handle_t *timer,
                                void *data);
@@ -160,9 +199,7 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       else if (evt->data.evt_system_external_signal.extsignals
           == ADV_INTERVAL_TIMER_EXT_SIGNAL) {
           app_log_info("App timer event" APP_LOG_NL);
-          bthome_v2_reset_measurement();
           bthome_add_sensor_data_and_battery();
-          bthome_v2_send_packet();
           start_deep_sleep_timer();
       }
       else if (evt->data.evt_system_external_signal.extsignals
@@ -205,6 +242,45 @@ static void sensor_init(void)
     app_log_warning("Relative Humidity and Temperature sensor initialization failed." APP_LOG_NL);
   }
 #endif // SL_CATALOG_SENSOR_RHT_PRESENT
+#ifdef SL_CATALOG_SENSOR_HALL_PRESENT
+  sc = sl_sensor_hall_init();
+  if (sc != SL_STATUS_OK) {
+    app_log_warning("Hall sensor initialization failed." APP_LOG_NL);
+  }
+#endif // SL_CATALOG_SENSOR_HALL_PRESENT
+#ifdef SL_CATALOG_SENSOR_LIGHT_PRESENT
+  sc = sl_sensor_light_init();
+  if (sc != SL_STATUS_OK) {
+    app_log_warning("Ambient light and UV index sensor initialization failed." APP_LOG_NL);
+  }
+#endif // SL_CATALOG_SENSOR_LIGHT_PRESENT
+#ifdef SL_CATALOG_SENSOR_IMU_PRESENT
+  sl_sensor_imu_init();
+  sc = sl_sensor_imu_enable(true);
+  if (SL_STATUS_OK != sc) {
+    app_log_warning("Inertial Measurement Unit sensor sensor initialization failed." APP_LOG_NL);
+  }
+#endif // SL_CATALOG_SENSOR_IMU_PRESENT
+#ifdef SL_CATALOG_SENSOR_PRESSURE_PRESENT
+  sc = sl_sensor_pressure_init();
+  if (sc != SL_STATUS_OK) {
+    app_log_warning("Air Pressure sensor initialization failed." APP_LOG_NL);
+  }
+#endif // SL_CATALOG_SENSOR_PRESSURE_PRESENT
+#ifdef SL_CATALOG_SENSOR_GAS_PRESENT
+  if (!sl_power_supply_is_low_power()) {
+    sc = sl_sensor_gas_init();
+    if (sc != SL_STATUS_OK) {
+      app_log_warning("Air quality sensor initialization failed." APP_LOG_NL);
+    }
+  }
+#endif // SL_CATALOG_SENSOR_GAS_PRESENT
+#ifdef SL_CATALOG_SENSOR_SOUND_PRESENT
+  sc = sl_sensor_sound_init();
+  if (sc != SL_STATUS_OK) {
+    app_log_warning("Sound level sensor initialization failed." APP_LOG_NL);
+  }
+#endif // SL_CATALOG_SENSOR_SOUND_PRESENT
 }
 
 /***************************************************************************//**
@@ -215,6 +291,27 @@ static void sensor_deinit(void)
 #ifdef SL_CATALOG_SENSOR_RHT_PRESENT
   sl_sensor_rht_deinit();
 #endif // SL_CATALOG_SENSOR_RHT_PRESENT
+#ifdef SL_CATALOG_SENSOR_HALL_PRESENT
+  sl_sensor_hall_deinit();
+#endif // SL_CATALOG_SENSOR_HALL_PRESENT
+#ifdef SL_CATALOG_SENSOR_LIGHT_PRESENT
+  sl_sensor_light_deinit();
+#endif // SL_CATALOG_SENSOR_LIGHT_PRESENT
+#ifdef SL_CATALOG_SENSOR_IMU_PRESENT
+  sl_sensor_imu_enable(false);
+  sl_sensor_imu_deinit();
+#endif // SL_CATALOG_SENSOR_IMU_PRESENT
+#ifdef SL_CATALOG_SENSOR_PRESSURE_PRESENT
+  sl_sensor_pressure_deinit();
+#endif // SL_CATALOG_SENSOR_PRESSURE_PRESENT
+#ifdef SL_CATALOG_SENSOR_GAS_PRESENT
+  if (!sl_power_supply_is_low_power()) {
+    sl_sensor_gas_deinit();
+  }
+#endif // SL_CATALOG_SENSOR_GAS_PRESENT
+#ifdef SL_CATALOG_SENSOR_SOUND_PRESENT
+  sl_sensor_sound_deinit();
+#endif // SL_CATALOG_SENSOR_SOUND_PRESENT
 }
 
 /***************************************************************************//**
@@ -227,30 +324,143 @@ void bthome_add_sensor_data_and_battery(void) {
   // usually is around 300ms if you init all the sensors on Thunderboard     //
   // and just a few or under ms for the temperature and humidity             //
   /////////////////////////////////////////////////////////////////////////////
+  sl_status_t sc;
+  char formatted_string[22];
   sensor_init();
 
+#if defined(SL_CATALOG_SENSOR_RHT_PRESENT)
   uint32_t rhumidity;
   int32_t temperature;
-  uint8_t bat_level;
-
-#if defined(SL_CATALOG_SENSOR_RHT_PRESENT)
-  sl_status_t sc;
   sc = sl_sensor_rht_get(&rhumidity, &temperature);
   if (SL_STATUS_OK == sc) {
-    app_log_info("Humidity = %ld %%RH" APP_LOG_NL, rhumidity / 1000);
-    app_log_info("Temperature = %ld C" APP_LOG_NL, temperature / 1000);
+    app_log_info("Humidity = %3.2f %%RH" APP_LOG_NL, (float)rhumidity / 1000.0f);
+    app_log_info("Temperature = %3.2f C" APP_LOG_NL, (float)temperature / 1000.0f);
+    bthome_v2_reset_measurement();
     bthome_v2_add_measurement_float(ID_TEMPERATURE_PRECISE, (float)temperature / 1000.0f);
     bthome_v2_add_measurement_float(ID_HUMIDITY, (float)rhumidity / 1000.0f);
+    send_data_packet_to_bthome_v2();
   } else if (SL_STATUS_NOT_INITIALIZED == sc) {
     app_log_info("Relative Humidity and Temperature sensor is not initialized." APP_LOG_NL);
   } else {
     app_log_status_error_f(sc, "RHT sensor measurement failed" APP_LOG_NL);
   }
-#endif
+#endif //SL_CATALOG_SENSOR_RHT_PRESENT
 
+#if defined(SL_CATALOG_SENSOR_HALL_PRESENT)
+  float field_strength;
+  bool alert;
+  bool tamper;
+  sc = sl_sensor_hall_get(&field_strength, &alert, &tamper);
+  if (SL_STATUS_OK == sc) {
+    app_log_info("Magnetic flux = %4.3f mT" APP_LOG_NL, field_strength);
+    sprintf(formatted_string, "MF: %4.3f mT;", field_strength);
+    send_text_to_bthome_v2(formatted_string);
+  } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+    app_log_info("Hall sensor is not initialized." APP_LOG_NL);
+  } else {
+    app_log_status_error_f(sc, "Hall sensor measurement failed" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_HALL_PRESENT
+
+#if defined(SL_CATALOG_SENSOR_LIGHT_PRESENT)
+  float lux;
+  float uvi;
+  sc = sl_sensor_light_get(&lux, &uvi);
+  if (SL_STATUS_OK == sc) {
+    app_log_info("Ambient light = %f lux" APP_LOG_NL, lux);
+    app_log_info("UV Index = %u" APP_LOG_NL, (unsigned int)uvi);
+    bthome_v2_reset_measurement();
+    bthome_v2_add_measurement_float(ID_ILLUMINANCE, lux);
+    bthome_v2_add_measurement_float(ID_UV, uvi);
+    send_data_packet_to_bthome_v2();
+  } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+    app_log_info("Ambient light and UV index sensor is not initialized." APP_LOG_NL);
+  } else {
+    app_log_status_error_f(sc, "Light sensor measurement failed" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_LIGHT_PRESENT
+
+#if defined(SL_CATALOG_SENSOR_IMU_PRESENT)
+  int16_t ovec[3];
+  int16_t avec[3];
+  if (!sl_power_supply_is_low_power()) {
+    sc = sl_sensor_imu_get(ovec, avec);
+    if (SL_STATUS_OK == sc) {
+        app_log_info("IMU: ORI : %04d,%04d,%04d" APP_LOG_NL, ovec[0], ovec[1], ovec[2]);
+        app_log_info("IMU: ACC : %04d,%04d,%04d" APP_LOG_NL, avec[0], avec[1], avec[2]);
+        sprintf(formatted_string, "O: %04d,%04d,%04d;", ovec[0], ovec[1], ovec[2]);
+        send_text_to_bthome_v2(formatted_string);
+        sprintf(formatted_string, "A: %04d,%04d,%04d;", avec[0], avec[1], avec[2]);
+        send_text_to_bthome_v2(formatted_string);
+    } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+        app_log_info("Inertial Measurement Unit sensor is not initialized." APP_LOG_NL);
+    }
+  } else {
+      app_log_info("Inertial Measurement Unit doesn't work on battery power" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_IMU_PRESENT
+
+#if defined(SL_CATALOG_SENSOR_PRESSURE_PRESENT)
+  float pressure;
+  sc = sl_sensor_pressure_get(&pressure);
+  if (SL_STATUS_OK == sc) {
+    app_log_info("Pressure = %0.3f mbar" APP_LOG_NL, pressure);
+    bthome_v2_reset_measurement();
+    bthome_v2_add_measurement_float(ID_PRESSURE, pressure);
+    send_data_packet_to_bthome_v2();
+  } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+    app_log_info("Air pressure sensor is not initialized" APP_LOG_NL);
+  } else {
+    app_log_status_error_f(sc, "Pressure sensor measurement failed" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_IMU_PRESENT
+
+#if defined(SL_CATALOG_SENSOR_GAS_PRESENT)
+  uint16_t eco2;
+  uint16_t tvoc;
+  if (!sl_power_supply_is_low_power()) {
+    sc = sl_sensor_gas_get(&eco2, &tvoc);
+    if (SL_STATUS_OK == sc) {
+      app_log_info("eCO2 = %u ppm" APP_LOG_NL, (uint16_t)eco2);
+      app_log_info("TVOC = %u ppd" APP_LOG_NL, (uint16_t)tvoc);
+      bthome_v2_reset_measurement();
+      bthome_v2_add_measurement(ID_CO2, eco2);
+      bthome_v2_add_measurement(ID_TVOC, tvoc);
+      send_data_packet_to_bthome_v2();
+    } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+      app_log_info("Air quality sensor is not initialized." APP_LOG_NL);
+    } else if (SL_STATUS_NOT_READY != sc) {
+      app_log_status_error_f(sc, "Air quality sensor measurement failed" APP_LOG_NL);
+    }
+  } else {
+      app_log_info("Gas monitor doesn't work on battery power" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_GAS_PRESENT
+
+#if defined(SL_CATALOG_SENSOR_SOUND_PRESENT)
+#define MIC_SAMPLE_BUFFER_SIZE     1000
+  float sound_level;
+  static int16_t buffer[MIC_SAMPLE_BUFFER_SIZE];
+  sl_mic_get_n_samples(buffer, MIC_SAMPLE_BUFFER_SIZE);
+  while (!sl_mic_sample_buffer_ready()) {
+  }
+  sc = sl_mic_calculate_sound_level(&sound_level, buffer, MIC_SAMPLE_BUFFER_SIZE, 0);
+  if (SL_STATUS_OK == sc) {
+    app_log_info("Sound level = %3.2f dBA" APP_LOG_NL, sound_level);
+    sprintf(formatted_string, "SL: %3.2f dBA;", sound_level);
+    send_text_to_bthome_v2(formatted_string);
+  } else if (SL_STATUS_NOT_INITIALIZED == sc) {
+    app_log_info("Sound level sensor is not initialized." APP_LOG_NL);
+  }else {
+    app_log_status_error_f(sc, "Sound level measurement failed" APP_LOG_NL);
+  }
+#endif //SL_CATALOG_SENSOR_SOUND_PRESENT
+
+  uint8_t bat_level;
   bat_level = sl_power_supply_get_battery_level();
   app_log_info("Battery level = %d %%" APP_LOG_NL, bat_level);
   bthome_v2_add_measurement_float(ID_BATTERY, (float)bat_level);
+  send_data_packet_to_bthome_v2();
 
   // Deinitialize the sensors to save power
   sensor_deinit();
@@ -328,4 +538,20 @@ static void start_deep_sleep_timer(void){
                                NULL,
                                0,
                                0);
+}
+
+/**************************************************************************//**
+ * Send text data using BTHome V2 protocol
+ *****************************************************************************/
+static void send_text_to_bthome_v2(const char text[]){
+  bthome_v2_reset_measurement();
+  bthome_v2_add_text(text);
+  bthome_v2_send_packet();
+  // Add an delay to let advertising data change, default 100ms
+  sl_sleeptimer_delay_millisecond(BLE_ADVERTISE_TIME_INTERVAL_MS * 2);
+}
+
+static void send_data_packet_to_bthome_v2(void){
+  bthome_v2_send_packet();
+  sl_sleeptimer_delay_millisecond(BLE_ADVERTISE_TIME_INTERVAL_MS * 2);
 }

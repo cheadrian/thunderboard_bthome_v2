@@ -1,16 +1,24 @@
 
 
+
 # Thunderboard BTHome V2
 Thunderboard Sense 2 sensors and buttons implementation with BTHome V2 protocol, compatible with Home Assistant.
 
-This will enable advertising of BTHome V2 temperature, humidity, and battery for 0.5 seconds every 60 seconds, while maintain EM2 deep sleep state when there's no advertising, so optimized for long battery life. 
+In this branch you can find the code that advertise data from all the sensors on the board every 60 seconds.
+Magnetic field, IMU - acceleration and orientation, and sound level are sent as BTHome V2 TEXT, sequentially.
+
+It's still maintained EM2 deep sleep state when there's no advertising, so optimized for battery life, but reduced than version with only temperature and humidity.
+
+eCO2, VOCs and IMU data aren't advertised on battery mode.
+
+Check [in this article](https://medium.com/@che-adrian/thunderboard-sense-2-silicon-labs-to-home-assistant-with-bthome-074975f9243b) for introduction.
 
 ## Importing
-If you have an Thunderboard Sense 2 version BRD4166A you can [File] -> [Import] `thunderboard_sense2_bthome_v2.sls` from `SimplicityStudio` directory.
+If you have an Thunderboard Sense 2 version BRD4166A you can [File] -> [Import] `thunderboard_sense2_bthome_v2_all_sensors.sls` from `SimplicityStudio` directory.
 
 Make sure you have the latest firmware version installed on the board.
 
-Otherwise you should manually configure the Thunderboard Sense 2 Software Components in the Simplicity Studio by:
+Otherwise, you should manually configure the Thunderboard Sense 2 Software Components in the Simplicity Studio by:
 
 - Add the [Third-Party Hardware Drivers](https://docs.silabs.com/application-examples/1.3.0/ae-getting-started/how-do-you-use-it#adding-sdk-extensions-for-hardware-drivers) into the SDK
 - Create a new project from example `Third Party Hardware Drivers - BT Home v2`
@@ -21,10 +29,25 @@ Otherwise you should manually configure the Thunderboard Sense 2 Software Compon
 
 You can read more and see step-by-step pictures [in this article](https://medium.com/@che-adrian/thunderboard-sense-2-silicon-labs-to-home-assistant-with-bthome-074975f9243b).
 
-## Usage
-After you flash the software, you can simply enter into the Home Assistant and add the BTHome instance in the devices.
+Additionally, for this version, you have to install the rest of the sensors from Software Components:
 
-Encryption is disabled in this example. You can enable it by editing `app.c`.
+- Install `Air pressure sensor`
+- Install `Air quality sensor`
+- Install `Ambient light and UV index sensor`
+- Install `Hall effect sensor`
+- Install `Inertial Measurement Unit sensor`
+- Install `Sensor select utility`
+- Install `Sound level sensor (microphone)`
+- Install `Component Catalog`
+
+Check the vendor demo project example project, Bluetooth - SoC Thunderboard Sense 2, for reference.
+
+After you replace content of `app.c`, you have to edit your `bthome_v2.h` and `bthome_v2.c` by replacing content of your copies with the on provided in `src` directory.
+
+## Usage
+After you flash the software, you can simply enter into the Home Assistant and add the BTHome V2 instance in the devices.
+
+Encryption is disabled in this example. You can enable it by editing `app.c`. Not tested with text properties.
 
 ## Custom HA integration
 BTHome V2 is supported natively in Home Assistant and doesn't require any custom integration, and it is stable.
