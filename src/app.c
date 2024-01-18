@@ -255,10 +255,12 @@ static void sensor_init(void)
   }
 #endif // SL_CATALOG_SENSOR_LIGHT_PRESENT
 #ifdef SL_CATALOG_SENSOR_IMU_PRESENT
-  sl_sensor_imu_init();
-  sc = sl_sensor_imu_enable(true);
-  if (SL_STATUS_OK != sc) {
-    app_log_warning("Inertial Measurement Unit sensor sensor initialization failed." APP_LOG_NL);
+  if (!sl_power_supply_is_low_power()) {
+    sl_sensor_imu_init();
+    sc = sl_sensor_imu_enable(true);
+    if (SL_STATUS_OK != sc) {
+        app_log_warning("Inertial Measurement Unit sensor sensor initialization failed." APP_LOG_NL);
+    }
   }
 #endif // SL_CATALOG_SENSOR_IMU_PRESENT
 #ifdef SL_CATALOG_SENSOR_PRESSURE_PRESENT
@@ -298,8 +300,10 @@ static void sensor_deinit(void)
   sl_sensor_light_deinit();
 #endif // SL_CATALOG_SENSOR_LIGHT_PRESENT
 #ifdef SL_CATALOG_SENSOR_IMU_PRESENT
-  sl_sensor_imu_enable(false);
-  sl_sensor_imu_deinit();
+  if (!sl_power_supply_is_low_power()) {
+    sl_sensor_imu_enable(false);
+    sl_sensor_imu_deinit();
+  }
 #endif // SL_CATALOG_SENSOR_IMU_PRESENT
 #ifdef SL_CATALOG_SENSOR_PRESSURE_PRESENT
   sl_sensor_pressure_deinit();
