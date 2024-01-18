@@ -101,6 +101,7 @@ static void start_button_none_timer(void);
 static void start_deep_sleep_timer(void);
 static void send_text_to_bthome_v2(const char text[]);
 static void send_data_packet_to_bthome_v2(void);
+static bool sensor_initialized = false;
 
 static void adv_interval_timer_callback(sl_sleeptimer_timer_handle_t *timer,
                                void *data);
@@ -121,8 +122,11 @@ void app_init(void)
   app_log_info("===== BTHome v2 - Thunderboard application =====" APP_LOG_NL);
   app_log_info("======= BTHome v2 initialization =========" APP_LOG_NL);
 
+  sl_power_supply_probe();
   // Make power management to request EM2 state
   sl_power_manager_add_em_requirement(SL_POWER_MANAGER_EM2);
+
+  sensor_init();
 }
 
 /**************************************************************************//**
@@ -156,8 +160,6 @@ void sl_bt_on_event(sl_bt_msg_t *evt)
       /////////////////////////////////////////////////////////////////////////////
       bthome_v2_init(name, false, key, false);
       bthome_add_sensor_data_and_battery();
-      bthome_v2_add_measurement_state(EVENT_BUTTON, EVENT_BUTTON_NONE, 0);
-      bthome_v2_send_packet();
 
       // Add an timer to send data every ADVERTISING_INTERVAL
       sl_sleeptimer_start_periodic_timer_ms(&adv_interval_timer,
@@ -236,6 +238,7 @@ void sl_button_on_change(const sl_button_t *handle)
 static void sensor_init(void)
 {
   sl_status_t sc;
+  sensor_initialized = true;
 #ifdef SL_CATALOG_SENSOR_RHT_PRESENT
   sc = sl_sensor_rht_init();
   if (sc != SL_STATUS_OK) {
@@ -283,6 +286,7 @@ static void sensor_init(void)
     app_log_warning("Sound level sensor initialization failed." APP_LOG_NL);
   }
 #endif // SL_CATALOG_SENSOR_SOUND_PRESENT
+  sl_sleeptimer_delay_millisecond(50);
 }
 
 /***************************************************************************//**
@@ -290,6 +294,7 @@ static void sensor_init(void)
  ******************************************************************************/
 static void sensor_deinit(void)
 {
+  sensor_initialized = false;
 #ifdef SL_CATALOG_SENSOR_RHT_PRESENT
   sl_sensor_rht_deinit();
 #endif // SL_CATALOG_SENSOR_RHT_PRESENT
@@ -330,7 +335,9 @@ void bthome_add_sensor_data_and_battery(void) {
   /////////////////////////////////////////////////////////////////////////////
   sl_status_t sc;
   char formatted_string[22];
-  sensor_init();
+  if(!sensor_initialized){
+     sensor_init();
+  }
 
 #if defined(SL_CATALOG_SENSOR_RHT_PRESENT)
   uint32_t rhumidity;
@@ -455,7 +462,7 @@ void bthome_add_sensor_data_and_battery(void) {
     send_text_to_bthome_v2(formatted_string);
   } else if (SL_STATUS_NOT_INITIALIZED == sc) {
     app_log_info("Sound level sensor is not initialized." APP_LOG_NL);
-  }else {
+  } else {
     app_log_status_error_f(sc, "Sound level measurement failed" APP_LOG_NL);
   }
 #endif //SL_CATALOG_SENSOR_SOUND_PRESENT
@@ -463,7 +470,13 @@ void bthome_add_sensor_data_and_battery(void) {
   uint8_t bat_level;
   bat_level = sl_power_supply_get_battery_level();
   app_log_info("Battery level = %d %%" APP_LOG_NL, bat_level);
-  bthome_v2_add_measurement_float(ID_BATTERY, (float)bat_level);
+  bthome_v2_reset_measurement();
+  if(!sl_power_supply_is_low_power()){
+    bthome_v2_add_measurement(STATE_PLUG, true);
+  } else {
+    bthome_v2_add_measurement_float(ID_BATTERY, (float)bat_level);
+    bthome_v2_add_measurement(STATE_PLUG, false);
+  }
   send_data_packet_to_bthome_v2();
 
   // Deinitialize the sensors to save power
@@ -550,12 +563,14 @@ static void start_deep_sleep_timer(void){
 static void send_text_to_bthome_v2(const char text[]){
   bthome_v2_reset_measurement();
   bthome_v2_add_text(text);
-  bthome_v2_send_packet();
-  // Add an delay to let advertising data change, default 100ms
-  sl_sleeptimer_delay_millisecond(BLE_ADVERTISE_TIME_INTERVAL_MS * 2);
+  send_data_packet_to_bthome_v2();
 }
 
+/**************************************************************************//**
+ * Add delay after update the advertising data
+ *****************************************************************************/
 static void send_data_packet_to_bthome_v2(void){
   bthome_v2_send_packet();
-  sl_sleeptimer_delay_millisecond(BLE_ADVERTISE_TIME_INTERVAL_MS * 2);
+  // Add an delay to let advertising data change, default 100ms
+  sl_sleeptimer_delay_millisecond(BLE_ADVERTISE_TIME_INTERVAL_MS * 5);
 }
