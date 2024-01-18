@@ -6,7 +6,7 @@ Thunderboard Sense 2 sensors and buttons implementation with BTHome V2 protocol,
 
 This will enable advertising of BTHome V2 temperature, humidity, and battery for 0.5 seconds every 60 seconds, while maintain EM2 deep sleep state when there's no advertising, so optimized for long battery life. 
 
-If you want a version that would advertise all the sensors on the board, at the cost of a bit less battery life, then check out [this branch: all_sensors](/cheadrian/thunderboard_bthome_v2/tree/all_sensors)
+If you want a version that would advertise all the sensors on the board, at the cost of a bit less battery life, then check out [this branch: all_sensors](https://github.com/cheadrian/thunderboard_bthome_v2/tree/all_sensors)
 
 ## Importing
 If you have a Thunderboard Sense 2 version BRD4166A you can [File] -> [Import] `thunderboard_sense2_bthome_v2.sls` from `SimplicityStudio` directory.
